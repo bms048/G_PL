@@ -10,18 +10,24 @@ COLUMNS = ['תאריך', 'הכנסות', 'הוצאות', 'סיבה להוצאה'
 st.set_page_config(page_title="ניהול תקציב חכם", page_icon="💰", layout="centered")
 
 def get_data():
-    """קורא את הנתונים מהקובץ או יוצר תשתית חדשה אם הוא אינו קיים."""
+    """קורא את הנתונים ומנקה רווחים מהכותרות כדי למנוע קריסות."""
     if os.path.exists(FILE_NAME):
-        return pd.read_excel(FILE_NAME)
-    # יצירת טבלה ריקה במידה וזו הפעלה ראשונה
+        try:
+            df = pd.read_excel(FILE_NAME)
+            # ניקוי רווחים מיותרים מכל שמות העמודות
+            df.columns = df.columns.str.strip()
+            
+            # בדיקה האם כל עמודות החובה קיימות, אם לא - נוסיף אותן כדי שלא יקרוס
+            for col in COLUMNS:
+                if col not in df.columns:
+                    df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
+            
+            return df
+        except Exception as e:
+            # אם יש שגיאה קיצונית בקריאת הקובץ, נתחיל דף חדש במקום לקרוס
+            return pd.DataFrame(columns=COLUMNS)
+            
     return pd.DataFrame(columns=COLUMNS)
-
-def save_new_entry(entry_data, df):
-    """שומר את הנתונים החדשים לקובץ האקסל."""
-    new_df = pd.DataFrame([entry_data])
-    updated_df = pd.concat([df, new_df], ignore_index=True)
-    updated_df.to_excel(FILE_NAME, index=False)
-    return updated_df
 
 # טעינת הנתונים
 df = get_data()
