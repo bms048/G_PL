@@ -10,33 +10,47 @@ COLUMNS = ['תאריך', 'הכנסות', 'הוצאות', 'סיבה להוצאה'
 st.set_page_config(page_title="ניהול תקציב חכם", page_icon="💰", layout="centered")
 
 def super_clean_numbers(val):
-    """מנקה אגרסיבי: מוחק כל סמל, אות או רווח שאינם מספר, כדי למנוע איפוס ל-0"""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
         return float(val)
-    
     val_str = str(val)
-    # משאיר רק ספרות ונקודה עשרונית
-    val_str = re.sub(r'[^\d\.]', '', val_str)
-    
+    val_str = re.sub(r'[^\d\.\-]', '', val_str)
     try:
         return float(val_str) if val_str else 0.0
     except ValueError:
         return 0.0
 
+def fix_column_names(df):
+    """מנוע תרגום: מזהה עמודות בשמות דומים ומשנה אותן לשמות התקניים של האפליקציה"""
+    rename_map = {}
+    for col in df.columns:
+        col_clean = str(col).strip()
+        if col_clean in ['הכנסה', 'הכנסות', 'סכום הכנסה']:
+            rename_map[col] = 'הכנסות'
+        elif col_clean in ['הוצאה', 'הוצאות', 'סכום הוצאה']:
+            rename_map[col] = 'הוצאות'
+        elif col_clean in ['סיבה', 'סיבה להוצאה', 'פירוט', 'הערות']:
+            rename_map[col] = 'סיבה להוצאה'
+        elif col_clean in ['תאריך', 'זמן', 'מועד']:
+            rename_map[col] = 'תאריך'
+    
+    # שינוי שמות העמודות לפי המילון שיצרנו
+    df = df.rename(columns=rename_map)
+    return df
+
 def get_data():
     if os.path.exists(FILE_NAME):
         try:
             df = pd.read_excel(FILE_NAME)
-            df.columns = df.columns.str.strip()
+            df = fix_column_names(df) # תיקון שמות
             df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
             
+            # השלמת עמודות חסרות אם עדיין חסר משהו
             for col in COLUMNS:
                 if col not in df.columns:
                     df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
                     
-            # הפעלת הניקוי האגרסיבי
             df['הכנסות'] = df['הכנסות'].apply(super_clean_numbers)
             df['הוצאות'] = df['הוצאות'].apply(super_clean_numbers)
             return df
@@ -110,17 +124,20 @@ with st.expander("🛠️ תפריט אפשרויות מתקדם (היסטורי
         if st.button("ייבא והחלף נתונים"):
             try:
                 imported_df = pd.read_excel(uploaded_file)
-                imported_df.columns = imported_df.columns.str.strip()
+                # שימוש במנוע התרגום מיד עם העלאת הקובץ!
+                imported_df = fix_column_names(imported_df)
                 imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
                 
-                # מפעילים את המנקה האגרסיבי גם ישר על הקובץ שיובא!
-                if 'הכנסות' in imported_df.columns:
-                    imported_df['הכנסות'] = imported_df['הכנסות'].apply(super_clean_numbers)
-                if 'הוצאות' in imported_df.columns:
-                    imported_df['הוצאות'] = imported_df['הוצאות'].apply(super_clean_numbers)
+                # השלמת עמודות חסרות כדי לשמור תקין
+                for col in COLUMNS:
+                    if col not in imported_df.columns:
+                        imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
+                
+                imported_df['הכנסות'] = imported_df['הכנסות'].apply(super_clean_numbers)
+                imported_df['הוצאות'] = imported_df['הוצאות'].apply(super_clean_numbers)
                     
                 imported_df.to_excel(FILE_NAME, index=False)
-                st.success("הקובץ הועלה בהצלחה! מרענן...")
+                st.success("הקובץ הועלה ונוקה בהצלחה! מרענן...")
                 st.rerun()
             except Exception as e:
                 st.error(f"שגיאה בייבוא הקובץ: {e}")
