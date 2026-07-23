@@ -11,13 +11,11 @@ if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=COLUMNS)
 
 def parse_raw_value(val):
-    """המרה סופר-סלחנית שמטפלת ברווחים נסתרים, פסיקים, ורווחים לא קטיעים"""
-    if pd.isna(val) or val is None:
+    if pd.isna(val) if isinstance(val, (int, float, str)) else True:
         return 0.0
     if isinstance(val, (int, float)):
         return float(val)
     
-    # המרה למחרוזת וניקוי רווחים מיוחדים של אקסל
     s = str(val).replace('\xa0', '').replace(' ', '').replace(',', '').replace('₪', '').strip()
     try:
         return float(s)
@@ -88,30 +86,26 @@ st.markdown("### 📥 ייבוא קובץ אקסל")
 uploaded_file = st.file_uploader("בחר קובץ אקסל (.xlsx):", type=['xlsx'])
 
 if uploaded_file is not None:
-    # הצגת נתוני דיאגנוסטיקה גולמיים
-    st.info("🔍 נתוני דיאגנוסטיקה גולמיים מהקובץ שהועלה:")
-    try:
-        raw_df = pd.read_excel(uploaded_file)
-        st.write("**עמודות שזוהו בקובץ הגולמי:**", raw_df.columns.tolist())
-        st.write("**3 שורות ראשונות לפני עיבוד:**", raw_df.head(3))
-    except Exception as e:
-        st.error(f"שגיאה בקריאת הקובץ הגולמי: {e}")
-
     if st.button("טען נתונים מהקובץ"):
         try:
             uploaded_file.seek(0)
             imported_df = pd.read_excel(uploaded_file)
+            
+            # 1. הסרת עמודות כפולות (השינוי הקריטי!)
+            imported_df = imported_df.loc[:, ~imported_df.columns.duplicated()]
+            
+            # 2. תיקון שמות
             imported_df = fix_cols(imported_df)
+            imported_df = imported_df.loc[:, ~imported_df.columns.duplicated()] # שוב למקרה ששני שמות תורגמו לאותו שם
             imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
             
-            if 'הכנסות' in imported_df.columns:
-                imported_df['הכנסות'] = imported_df['הכנסות'].apply(parse_raw_value)
-            if 'הוצאות' in imported_df.columns:
-                imported_df['הוצאות'] = imported_df['הוצאות'].apply(parse_raw_value)
-                
+            # 3. מילוי והמרה
             for col in COLUMNS:
                 if col not in imported_df.columns:
                     imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
+            
+            imported_df['הכנסות'] = pd.to_numeric(imported_df['הכנסות'], errors='coerce').fillna(0)
+            imported_df['הוצאות'] = pd.to_numeric(imported_df['הוצאות'], errors='coerce').fillna(0)
             
             st.session_state.df = imported_df[COLUMNS]
             st.success("הנתונים נטענו בהצלחה!")
