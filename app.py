@@ -112,5 +112,5 @@ with st.expander("⚠️ אזור מסוכן - איפוס אפליקציה"):
         pd.DataFrame(columns=COLUMNS).to_excel(FILE_NAME, index=False)
         st.success("כל הנתונים נמחקו בהצלחה! האפליקציה אופסה.")
         st.rerun()
-        
+
     
