@@ -1,16 +1,17 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import os
 import re
 
-FILE_NAME = 'my_budget_data.xlsx'
 COLUMNS = ['תאריך', 'הכנסות', 'הוצאות', 'סיבה להוצאה']
 
 st.set_page_config(page_title="ניהול תקציב חכם", page_icon="💰", layout="centered")
 
+# --- ניהול זיכרון פנימי (Session State) ---
+if 'df' not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=COLUMNS)
+
 def super_clean_numbers(val):
-    """מנקה אגרסיבי לערכים - משאיר רק מספרים"""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
@@ -22,59 +23,28 @@ def super_clean_numbers(val):
     except ValueError:
         return 0.0
 
-def fuzzy_match_columns(df):
-    """מנוע תרגום חכם: מזהה עמודות גם אם יש בהן תוספות טקסט כמו 'שקלים' או סמלים"""
+def fix_cols(df):
     rename_map = {}
     for col in df.columns:
-        col_str = str(col).replace(' ', '')
-        if re.search(r'הכנס[הות]|זכות|פלוס', col_str):
+        col_clean = str(col).strip()
+        if 'הכנס' in col_clean or 'זכות' in col_clean:
             rename_map[col] = 'הכנסות'
-        elif re.search(r'הוצא[הות]|חובה|מינוס', col_str):
+        elif 'הוצא' in col_clean or 'חובה' in col_clean:
             rename_map[col] = 'הוצאות'
-        elif re.search(r'סיבה|פירוט|הערות|פרטים', col_str):
+        elif 'סיבה' in col_clean or 'פירוט' in col_clean or 'תיאור' in col_clean:
             rename_map[col] = 'סיבה להוצאה'
-        elif re.search(r'תאריך|זמן|מועד', col_str):
+        elif 'תאריך' in col_clean:
             rename_map[col] = 'תאריך'
-    
     return df.rename(columns=rename_map)
 
-def get_data():
-    if os.path.exists(FILE_NAME):
-        try:
-            df = pd.read_excel(FILE_NAME)
-            df = fuzzy_match_columns(df) # שימוש בזיהוי החכם
-            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-            
-            for col in COLUMNS:
-                if col not in df.columns:
-                    df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
-                    
-            df['הכנסות'] = df['הכנסות'].apply(super_clean_numbers)
-            df['הוצאות'] = df['הוצאות'].apply(super_clean_numbers)
-            return df
-        except Exception:
-            return pd.DataFrame(columns=COLUMNS)
-    return pd.DataFrame(columns=COLUMNS)
-
-def save_new_entry(entry_data, df):
-    new_df = pd.DataFrame([entry_data])
-    if df.empty:
-        updated_df = new_df
-    else:
-        updated_df = pd.concat([df, new_df], ignore_index=True)
-    
-    updated_df['הכנסות'] = updated_df['הכנסות'].apply(super_clean_numbers)
-    updated_df['הוצאות'] = updated_df['הוצאות'].apply(super_clean_numbers)
-    updated_df.to_excel(FILE_NAME, index=False)
-    return updated_df
-
-# --- הפעלת האפליקציה ---
-df = get_data()
+# --- חישוב נתונים ---
+df = st.session_state.df
 
 total_income = float(df['הכנסות'].sum()) if not df.empty else 0.0
 total_expenses = float(df['הוצאות'].sum()) if not df.empty else 0.0
 current_balance = total_income - total_expenses
 
+# --- ממשק משתמש ---
 st.title("ניהול הכנסות והוצאות 💰")
 
 col1, col2, col3 = st.columns(3)
@@ -84,17 +54,18 @@ col3.metric(label="סה\"כ הוצאות", value=f"₪ {total_expenses:,.2f}")
 
 st.divider()
 
-st.markdown("### הוספת פעולה חדשה")
+# --- טופס הוספת פעולה ---
+st.markdown("### ➕ הוספת פעולה חדשה")
 with st.form(key="transaction_form", clear_on_submit=True):
     transaction_type = st.selectbox("סוג הפעולה:", ["הוצאה", "הכנסה"])
     amount = st.number_input("סכום (₪):", min_value=0.0, step=50.0)
     reason = st.text_input("סיבה (חובה להזין):")
     
-    if st.form_submit_button(label="שמור נתונים ועדכן טבלה"):
+    if st.form_submit_button(label="שמור פעולה"):
         if not reason.strip():
-            st.error("שגיאה: חובה להזין סיבה כדי לשמור את הפעולה.")
+            st.error("חובה להזין סיבה.")
         elif amount <= 0:
-            st.error("שגיאה: יש להזין סכום חיובי.")
+            st.error("חובה להזין סכום חיובי.")
         else:
             income_val = float(amount) if transaction_type == "הכנסה" else 0.0
             expense_val = float(amount) if transaction_type == "הוצאה" else 0.0
@@ -105,36 +76,39 @@ with st.form(key="transaction_form", clear_on_submit=True):
                 'הוצאות': expense_val,
                 'סיבה להוצאה': reason
             }
-            save_new_entry(new_entry, df)
-            st.success("הפעולה נשמרה בהצלחה!")
+            new_df = pd.DataFrame([new_entry])
+            st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
+            st.success("הפעולה נוספה בהצלחה!")
             st.rerun()
 
 st.divider()
 
-with st.expander("🛠️ תפריט אפשרויות מתקדם (היסטוריה וייבוא)"):
-    st.markdown("**טבלת הנתונים המלאה:**")
-    st.dataframe(df, use_container_width=True)
+# --- ייבוא קובץ ---
+st.markdown("### 📥 ייבוא קובץ אקסל")
+uploaded_file = st.file_uploader("בחר קובץ אקסל (.xlsx):", type=['xlsx'])
+
+if uploaded_file is not None:
+    if st.button("טען נתונים מהקובץ"):
+        try:
+            imported_df = pd.read_excel(uploaded_file)
+            imported_df = fix_cols(imported_df)
+            imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
             
-    st.markdown("**העלאת קובץ קודם (ידרוס את הנתונים הקיימים):**")
-    uploaded_file = st.file_uploader("בחר קובץ אקסל (.xlsx)", type=['xlsx'])
-    
-    if uploaded_file is not None:
-        if st.button("ייבא והחלף נתונים"):
-            try:
-                imported_df = pd.read_excel(uploaded_file)
-                # שימוש בזיהוי החכם מיד בעת ההעלאה!
-                imported_df = fuzzy_match_columns(imported_df)
-                imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
-                
-                for col in COLUMNS:
-                    if col not in imported_df.columns:
-                        imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
-                
-                imported_df['הכנסות'] = imported_df['הכנסות'].apply(super_clean_numbers)
-                imported_df['הוצאות'] = imported_df['הוצאות'].apply(super_clean_numbers)
-                    
-                imported_df.to_excel(FILE_NAME, index=False)
-                st.success("הקובץ הועלה ונוקה בהצלחה! מרענן...")
-                st.rerun()
-            except Exception as e:
-                st.error(f"שגיאה בייבוא הקובץ: {e}")
+            for col in COLUMNS:
+                if col not in imported_df.columns:
+                    imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
+            
+            imported_df['הכנסות'] = imported_df['הכנסות'].apply(super_clean_numbers)
+            imported_df['הוצאות'] = imported_df['הוצאות'].apply(super_clean_numbers)
+            
+            st.session_state.df = imported_df[COLUMNS]
+            st.success("הנתונים נטענו בהצלחה!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"שגיאה בקריאת הקובץ: {e}")
+
+st.divider()
+
+# --- הצגת הטבלה ---
+st.markdown("### 📊 טבלת הנתונים")
+st.dataframe(st.session_state.df, use_container_width=True)
