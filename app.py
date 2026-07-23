@@ -87,4 +87,12 @@ if os.path.exists(FILE_NAME):
             data=file,
             file_name=FILE_NAME,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            st.divider()
+with st.expander("⚠️ אזור מסוכן - איפוס אפליקציה"):
+    st.markdown("שים לב: פעולה זו תמחק את כל הנתונים שבאפליקציה ולא ניתן יהיה לשחזר אותם!")
+    if st.button("🗑️ מחק את כל הנתונים"):
+        # יצירת טבלה ריקה מחדש ודריסת הקובץ הקיים
+        pd.DataFrame(columns=COLUMNS).to_excel(FILE_NAME, index=False)
+        st.success("כל הנתונים נמחקו בהצלחה! האפליקציה אופסה.")
+        st.rerun()
         )
