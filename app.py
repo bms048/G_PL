@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import re
 
 COLUMNS = ['תאריך', 'הכנסות', 'הוצאות', 'סיבה להוצאה']
 
@@ -11,19 +10,8 @@ st.set_page_config(page_title="ניהול תקציב חכם", page_icon="💰", 
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=COLUMNS)
 
-def super_clean_numbers(val):
-    if pd.isna(val):
-        return 0.0
-    if isinstance(val, (int, float)):
-        return float(val)
-    val_str = str(val)
-    val_str = re.sub(r'[^\d\.\-]', '', val_str)
-    try:
-        return float(val_str) if val_str else 0.0
-    except ValueError:
-        return 0.0
-
 def fix_cols(df):
+    """מזהה ומאחד את שמות העמודות מכל קובץ אקסל"""
     rename_map = {}
     for col in df.columns:
         col_clean = str(col).strip()
@@ -40,17 +28,18 @@ def fix_cols(df):
 # --- חישוב נתונים ---
 df = st.session_state.df
 
-total_income = float(df['הכנסות'].sum()) if not df.empty else 0.0
-total_expenses = float(df['הוצאות'].sum()) if not df.empty else 0.0
-current_balance = total_income - total_expenses
+# המרה מספרית בטוחה לצורך חישוב הסכומים בלבד
+income_sum = pd.to_numeric(df['הכנסות'], errors='coerce').fillna(0).sum() if not df.empty and 'הכנסות' in df.columns else 0.0
+expense_sum = pd.to_numeric(df['הוצאות'], errors='coerce').fillna(0).sum() if not df.empty and 'הוצאות' in df.columns else 0.0
+current_balance = income_sum - expense_sum
 
 # --- ממשק משתמש ---
 st.title("ניהול הכנסות והוצאות 💰")
 
 col1, col2, col3 = st.columns(3)
 col1.metric(label="יתרה נוכחית", value=f"₪ {current_balance:,.2f}")
-col2.metric(label="סה\"כ הכנסות", value=f"₪ {total_income:,.2f}")
-col3.metric(label="סה\"כ הוצאות", value=f"₪ {total_expenses:,.2f}")
+col2.metric(label="סה\"כ הכנסות", value=f"₪ {income_sum:,.2f}")
+col3.metric(label="סה\"כ הוצאות", value=f"₪ {expense_sum:,.2f}")
 
 st.divider()
 
@@ -90,16 +79,20 @@ uploaded_file = st.file_uploader("בחר קובץ אקסל (.xlsx):", type=['xls
 if uploaded_file is not None:
     if st.button("טען נתונים מהקובץ"):
         try:
+            # טעינה ישירה ללא פילטרים אגרסיביים
             imported_df = pd.read_excel(uploaded_file)
             imported_df = fix_cols(imported_df)
             imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
             
+            # מילוי ערכים ריקים ב-0 עבור עמודות מספריות
+            if 'הכנסות' in imported_df.columns:
+                imported_df['הכנסות'] = imported_df['הכנסות'].fillna(0)
+            if 'הוצאות' in imported_df.columns:
+                imported_df['הוצאות'] = imported_df['הוצאות'].fillna(0)
+                
             for col in COLUMNS:
                 if col not in imported_df.columns:
                     imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
-            
-            imported_df['הכנסות'] = imported_df['הכנסות'].apply(super_clean_numbers)
-            imported_df['הוצאות'] = imported_df['הוצאות'].apply(super_clean_numbers)
             
             st.session_state.df = imported_df[COLUMNS]
             st.success("הנתונים נטענו בהצלחה!")
