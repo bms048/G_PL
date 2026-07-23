@@ -87,7 +87,24 @@ if os.path.exists(FILE_NAME):
             data=file,
             file_name=FILE_NAME,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            st.divider()
+        )
+        st.divider()
+with st.expander("⚙️ ייבוא נתונים מקובץ קיים (יישור קו)"):
+    st.markdown("העלה את קובץ האקסל הקודם שלך (למשל Test1.xlsx) כדי להמשיך לעבוד ממנו.")
+    uploaded_file = st.file_uploader("בחר קובץ אקסל", type=['xlsx'])
+    
+    if uploaded_file is not None:
+        if st.button("ייבא והחלף נתונים"):
+            try:
+                # קריאת הקובץ שהועלה
+                imported_df = pd.read_excel(uploaded_file)
+                # שמירתו כקובץ העבודה של האפליקציה (דורס את הריק)
+                imported_df.to_excel(FILE_NAME, index=False)
+                st.success("הנתונים נטענו בהצלחה! מרענן...")
+                st.rerun()
+            except Exception as e:
+                st.error("שגיאה בטעינת הקובץ. ודא שזהו קובץ אקסל תקין.")
+        st.divider()
 with st.expander("⚠️ אזור מסוכן - איפוס אפליקציה"):
     st.markdown("שים לב: פעולה זו תמחק את כל הנתונים שבאפליקציה ולא ניתן יהיה לשחזר אותם!")
     if st.button("🗑️ מחק את כל הנתונים"):
@@ -96,3 +113,4 @@ with st.expander("⚠️ אזור מסוכן - איפוס אפליקציה"):
         st.success("כל הנתונים נמחקו בהצלחה! האפליקציה אופסה.")
         st.rerun()
         
+    
