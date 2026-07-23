@@ -16,7 +16,8 @@ def get_data():
             df = pd.read_excel(FILE_NAME)
             # ניקוי רווחים נסתרים משמות העמודות
             df.columns = df.columns.str.strip()
-            
+            # --- זו השורה החדשה שאתה צריך להוסיף: מוחק עמודות Unnamed ---
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
             # וידוא שכל העמודות הקריטיות קיימות
             for col in COLUMNS:
                 if col not in df.columns:
