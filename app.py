@@ -10,6 +10,7 @@ COLUMNS = ['תאריך', 'הכנסות', 'הוצאות', 'סיבה להוצאה'
 st.set_page_config(page_title="ניהול תקציב חכם", page_icon="💰", layout="centered")
 
 def super_clean_numbers(val):
+    """מנקה אגרסיבי לערכים - משאיר רק מספרים"""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
@@ -21,32 +22,29 @@ def super_clean_numbers(val):
     except ValueError:
         return 0.0
 
-def fix_column_names(df):
-    """מנוע תרגום: מזהה עמודות בשמות דומים ומשנה אותן לשמות התקניים של האפליקציה"""
+def fuzzy_match_columns(df):
+    """מנוע תרגום חכם: מזהה עמודות גם אם יש בהן תוספות טקסט כמו 'שקלים' או סמלים"""
     rename_map = {}
     for col in df.columns:
-        col_clean = str(col).strip()
-        if col_clean in ['הכנסה', 'הכנסות', 'סכום הכנסה']:
+        col_str = str(col).replace(' ', '')
+        if re.search(r'הכנס[הות]|זכות|פלוס', col_str):
             rename_map[col] = 'הכנסות'
-        elif col_clean in ['הוצאה', 'הוצאות', 'סכום הוצאה']:
+        elif re.search(r'הוצא[הות]|חובה|מינוס', col_str):
             rename_map[col] = 'הוצאות'
-        elif col_clean in ['סיבה', 'סיבה להוצאה', 'פירוט', 'הערות']:
+        elif re.search(r'סיבה|פירוט|הערות|פרטים', col_str):
             rename_map[col] = 'סיבה להוצאה'
-        elif col_clean in ['תאריך', 'זמן', 'מועד']:
+        elif re.search(r'תאריך|זמן|מועד', col_str):
             rename_map[col] = 'תאריך'
     
-    # שינוי שמות העמודות לפי המילון שיצרנו
-    df = df.rename(columns=rename_map)
-    return df
+    return df.rename(columns=rename_map)
 
 def get_data():
     if os.path.exists(FILE_NAME):
         try:
             df = pd.read_excel(FILE_NAME)
-            df = fix_column_names(df) # תיקון שמות
+            df = fuzzy_match_columns(df) # שימוש בזיהוי החכם
             df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
             
-            # השלמת עמודות חסרות אם עדיין חסר משהו
             for col in COLUMNS:
                 if col not in df.columns:
                     df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
@@ -70,7 +68,7 @@ def save_new_entry(entry_data, df):
     updated_df.to_excel(FILE_NAME, index=False)
     return updated_df
 
-# --- תחילת האפליקציה ---
+# --- הפעלת האפליקציה ---
 df = get_data()
 
 total_income = float(df['הכנסות'].sum()) if not df.empty else 0.0
@@ -124,11 +122,10 @@ with st.expander("🛠️ תפריט אפשרויות מתקדם (היסטורי
         if st.button("ייבא והחלף נתונים"):
             try:
                 imported_df = pd.read_excel(uploaded_file)
-                # שימוש במנוע התרגום מיד עם העלאת הקובץ!
-                imported_df = fix_column_names(imported_df)
+                # שימוש בזיהוי החכם מיד בעת ההעלאה!
+                imported_df = fuzzy_match_columns(imported_df)
                 imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
                 
-                # השלמת עמודות חסרות כדי לשמור תקין
                 for col in COLUMNS:
                     if col not in imported_df.columns:
                         imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
