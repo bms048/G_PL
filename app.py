@@ -78,3 +78,13 @@ st.divider()
 # הצגת היסטוריית הפעולות (אופציונלי, עוזר למעקב)
 with st.expander("לחץ כאן לצפייה בטבלת הנתונים המלאה"):
     st.dataframe(df, use_container_width=True)
+    st.divider()
+st.markdown("### גיבוי והורדת הנתונים")
+if os.path.exists(FILE_NAME):
+    with open(FILE_NAME, "rb") as file:
+        st.download_button(
+            label="📥 הורד את קובץ האקסל למכשיר שלך",
+            data=file,
+            file_name=FILE_NAME,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
