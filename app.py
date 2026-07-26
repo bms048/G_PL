@@ -23,16 +23,18 @@ def parse_raw_value(val):
         return 0.0
 
 def fix_cols(df):
+    """תרגום חכם ומתוקן - בודק סיבה/פירוט לפני בדיקת הוצאות כדי למנוע דריסה"""
     rename_map = {}
     for col in df.columns:
         col_clean = str(col).strip()
-        if 'הכנס' in col_clean or 'זכות' in col_clean:
+        # ראשית בודקים אם זו עמודת תיאור/סיבה
+        if any(w in col_clean for w in ['סיבה', 'פירוט', 'תיאור', 'הערה', 'הערות', 'פרטים']):
+            rename_map[col] = 'סיבה להוצאה'
+        elif 'הכנס' in col_clean or 'זכות' in col_clean:
             rename_map[col] = 'הכנסות'
         elif 'הוצא' in col_clean or 'חובה' in col_clean:
             rename_map[col] = 'הוצאות'
-        elif 'סיבה' in col_clean or 'פירוט' in col_clean or 'תיאור' in col_clean:
-            rename_map[col] = 'סיבה להוצאה'
-        elif 'תאריך' in col_clean:
+        elif 'תאריך' in col_clean or 'זמן' in col_clean:
             rename_map[col] = 'תאריך'
     return df.rename(columns=rename_map)
 
@@ -91,21 +93,20 @@ if uploaded_file is not None:
             uploaded_file.seek(0)
             imported_df = pd.read_excel(uploaded_file)
             
-            # 1. הסרת עמודות כפולות (השינוי הקריטי!)
+            # הסרת כפילויות ראשונית ותיקון שמות עמודות
             imported_df = imported_df.loc[:, ~imported_df.columns.duplicated()]
-            
-            # 2. תיקון שמות
             imported_df = fix_cols(imported_df)
-            imported_df = imported_df.loc[:, ~imported_df.columns.duplicated()] # שוב למקרה ששני שמות תורגמו לאותו שם
+            imported_df = imported_df.loc[:, ~imported_df.columns.duplicated()]
             imported_df = imported_df.loc[:, ~imported_df.columns.str.contains('^Unnamed')]
             
-            # 3. מילוי והמרה
+            # השלמת עמודות חסרות
             for col in COLUMNS:
                 if col not in imported_df.columns:
                     imported_df[col] = 0.0 if col in ['הכנסות', 'הוצאות'] else ""
             
             imported_df['הכנסות'] = pd.to_numeric(imported_df['הכנסות'], errors='coerce').fillna(0)
             imported_df['הוצאות'] = pd.to_numeric(imported_df['הוצאות'], errors='coerce').fillna(0)
+            imported_df['סיבה להוצאה'] = imported_df['סיבה להוצאה'].fillna("").astype(str)
             
             st.session_state.df = imported_df[COLUMNS]
             st.success("הנתונים נטענו בהצלחה!")
